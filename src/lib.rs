@@ -1,3 +1,4 @@
+use std::ffi::c_short;
 use std::os::unix::raw::dev_t;
 use winit::{
     event::*,
@@ -12,6 +13,7 @@ pub struct State {
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
+    render_pipeline: wgpu::RenderPipeline,
     size: winit::dpi::PhysicalSize<u32>,
     window: Window,
 }
@@ -64,14 +66,66 @@ impl State {
             view_formats: vec![],
         };
         surface.configure(&device, &config);
+        let shader_module_description = wgpu::ShaderModuleDescriptor {
+            label: Some("Shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
+        };
+        let shader = device.create_shader_module(shader_module_description);
+        let render_pipeline_layout_description = &wgpu::PipelineLayoutDescriptor {
+            label: Some("Render Pipeline Layout"),
+            bind_group_layouts: &[],
+            push_constant_ranges: &[],
+        };
+        let render_pipeline_layout = device.create_pipeline_layout(render_pipeline_layout_description);
+        let vertex_state = wgpu::VertexState {
+            module: &shader,
+            entry_point: "vs_main",
+            buffers: &[]
+        };
+        let color_target_state = wgpu::ColorTargetState {
+            format: config.format,
+            blend: Some(wgpu::BlendState::REPLACE),
+            write_mask: wgpu::ColorWrites::ALL
+        };
+        let fragment_state = wgpu::FragmentState {
+            module: &shader,
+            entry_point: "fs_main",
+            targets: &[Some(color_target_state)]
+        };
+        let primitive_state = wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            strip_index_format: None,
+            front_face: wgpu::FrontFace::Ccw,
+            cull_mode: Some(wgpu::Face::Back),
+            polygon_mode: wgpu::PolygonMode::Fill,
+            unclipped_depth: false,
+            conservative: false,
+        };
+        let multisample_state = wgpu::MultisampleState {
+            count: 1,
+            mask: !0,
+            alpha_to_coverage_enabled: false,
+        };
+        let render_pipeline_descriptor = &wgpu::RenderPipelineDescriptor {
+            label: Some("Render Pipeline"),
+            layout: Some(&render_pipeline_layout),
+            vertex: vertex_state,
+            fragment: Some(fragment_state),
+            primitive: primitive_state,
+            multisample: multisample_state,
+            depth_stencil: None,
+            multiview: None,
+        };
+        let render_pipeline = device.create_render_pipeline(render_pipeline_descriptor);
 
         Self {
-            window,
             surface,
             device,
             queue,
             config,
+            render_pipeline,
             size,
+            window,
         }
     }
 
@@ -113,7 +167,9 @@ impl State {
                 timestamp_writes: None,
             };
 
-            let _render_pass = encoder.begin_render_pass(pass_options);
+            let mut render_pass = encoder.begin_render_pass(pass_options);
+            render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.draw(0..3, 0..1);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
