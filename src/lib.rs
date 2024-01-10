@@ -1,9 +1,10 @@
+use std::os::unix::raw::dev_t;
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
 };
-use winit::window::Window;
+use winit::window::{Window, WindowId};
 use winit::event::WindowEvent;
 
 pub struct State {
@@ -19,60 +20,60 @@ impl State {
     pub fn window(&self) -> &Window {
         &self.window
     }
-     async fn new(window: Window) -> Self {
-         let size = window.inner_size();
-         let instance_options = wgpu::InstanceDescriptor {
-             backends: wgpu::Backends::all(),
-             ..Default::default()
-         };
-         let instance = wgpu::Instance::new(instance_options);
-         let surface = unsafe { instance
-             .create_surface(&window)
-             .unwrap()
-         };
-         let adapter_options = &wgpu::RequestAdapterOptions {
-             power_preference: wgpu::PowerPreference::HighPerformance,
-             compatible_surface: Some(&surface),
-             force_fallback_adapter: false
-         };
-         let adapter = instance
-             .request_adapter(adapter_options)
-             .await.unwrap();
-         let device_options = &wgpu::DeviceDescriptor {
-             features: wgpu::Features::empty(),
-             limits: wgpu::Limits::default(),
-             label: None,
-         };
-         let (device, queue) = adapter
-             .request_device(device_options, None)
-             .await.unwrap();
-         let surface_capabilities = surface.get_capabilities(&adapter);
-         let surface_format = surface_capabilities.formats
-             .iter()
-             .copied()
-             .filter(|f| f.is_srgb())
-             .next()
-             .unwrap_or(surface_capabilities.formats[0]);
-         let config = wgpu::SurfaceConfiguration {
-             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-             format: surface_format,
-             width: size.width,
-             height: size.height,
-             present_mode: surface_capabilities.present_modes[0],
-             alpha_mode: surface_capabilities.alpha_modes[0],
-             view_formats: vec![],
-         };
-         surface.configure(&device, &config);
+    async fn new(window: Window) -> Self {
+        let size = window.inner_size();
+        let instance_options = wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::all(),
+            ..Default::default()
+        };
+        let instance = wgpu::Instance::new(instance_options);
+        let surface = unsafe { instance
+            .create_surface(&window)
+            .unwrap()
+        };
+        let adapter_options = &wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::HighPerformance,
+            compatible_surface: Some(&surface),
+            force_fallback_adapter: false
+        };
+        let adapter = instance
+            .request_adapter(adapter_options)
+            .await.unwrap();
+        let device_options = &wgpu::DeviceDescriptor {
+            features: wgpu::Features::empty(),
+            limits: wgpu::Limits::default(),
+            label: None,
+        };
+        let (device, queue) = adapter
+            .request_device(device_options, None)
+            .await.unwrap();
+        let surface_capabilities = surface.get_capabilities(&adapter);
+        let surface_format = surface_capabilities.formats
+            .iter()
+            .copied()
+            .filter(|f| f.is_srgb())
+            .next()
+            .unwrap_or(surface_capabilities.formats[0]);
+        let config = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format: surface_format,
+            width: size.width,
+            height: size.height,
+            present_mode: surface_capabilities.present_modes[0],
+            alpha_mode: surface_capabilities.alpha_modes[0],
+            view_formats: vec![],
+        };
+        surface.configure(&device, &config);
 
-         Self {
-             window,
-             surface,
-             device,
-             queue,
-             config,
-             size,
-         }
-     }
+        Self {
+            window,
+            surface,
+            device,
+            queue,
+            config,
+            size,
+        }
+    }
 
     fn input(&mut self, _event: &WindowEvent) -> bool {
         false
@@ -129,7 +130,7 @@ impl State {
             self.surface.configure(&self.device, &self.config);
         }
     }
- }
+}
 
 pub async fn run() {
     env_logger::init();
@@ -140,41 +141,52 @@ pub async fn run() {
 
     event_loop.run(move |event, _, control_flow|
         match event {
-        Event::RedrawRequested(window_id) if window_id == state.window().id() => {
-            state.update();
-            match state.render() {
-                Ok(_) => {}
-                Err(wgpu::SurfaceError::Lost) => state.resize(state.size),
-                Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
-                Err(e) => eprintln!("{:?}", e),
-            }
+        Event::RedrawRequested(window_id) => {
+            handle_redraw(&mut state, window_id, control_flow);
         }
         Event::MainEventsCleared => {
             state.window().request_redraw();
         }
-        Event::WindowEvent {
-                ref event,
-                window_id,
-        } if window_id == state.window().id() => if !state.input(event) {
-            match event {
-                WindowEvent::CloseRequested | WindowEvent::KeyboardInput {
-                    input:
-                    KeyboardInput {
-                        state: ElementState::Pressed,
-                        virtual_keycode: Some(VirtualKeyCode::Escape),
-                        ..
-                    },
-                    ..
-                } => *control_flow = ControlFlow::Exit,
-                WindowEvent::Resized(physical_size) => {
-                    state.resize(*physical_size);
-                }
-                WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                    state.resize(**new_inner_size);
-                }
-                _ => {}
-            }
-        },
+        Event::WindowEvent { ref event, window_id } => {
+            handle_window(&mut state, window_id, control_flow, event)
+        }
         _ => {}
     });
+}
+
+fn handle_redraw(state: &mut State, window_id: WindowId, control_flow: &mut ControlFlow) {
+    if window_id == state.window().id() {
+        state.update();
+        match state.render() {
+            Ok(_) => {}
+            Err(wgpu::SurfaceError::Lost) => state.resize(state.size),
+            Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
+            Err(e) => eprintln!("{:?}", e),
+        }
+    }
+}
+
+fn handle_window(state: &mut State, window_id: WindowId, control_flow: &mut ControlFlow, event: &WindowEvent) {
+    if window_id == state.window().id() && !state.input(event) {
+        match event {
+            WindowEvent::CloseRequested | WindowEvent::KeyboardInput {
+                input:
+                KeyboardInput {
+                    state: ElementState::Pressed,
+                    virtual_keycode: Some(VirtualKeyCode::Escape),
+                    ..
+                },
+                ..
+            } => {
+                *control_flow = ControlFlow::Exit
+            },
+            WindowEvent::Resized(physical_size) => {
+                state.resize(*physical_size);
+            }
+            WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                state.resize(**new_inner_size);
+            }
+            _ => {}
+        }
+    }
 }
