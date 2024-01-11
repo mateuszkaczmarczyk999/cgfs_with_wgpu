@@ -3,6 +3,7 @@ use std::os::unix::raw::dev_t;
 use wgpu::util::DeviceExt;
 use winit::{
     event::*,
+    dpi::PhysicalSize,
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
 };
@@ -15,12 +16,6 @@ struct Vertex {
     position: [f32; 3],
     color: [f32; 3],
 }
-const VERTICES: &[Vertex] = &[
-    Vertex { position: [0.0, 0.5, 0.0], color: [1.0, 0.0, 0.0] },
-    Vertex { position: [-0.5, -0.5, 0.0], color: [0.0, 1.0, 0.0] },
-    Vertex { position: [0.5, -0.5, 0.0], color: [0.0, 0.0, 1.0] },
-];
-
 impl Vertex {
     const ATTRIBS: [wgpu::VertexAttribute; 2] = [
         wgpu::VertexAttribute {
@@ -43,6 +38,21 @@ impl Vertex {
     }
 }
 
+struct Raytracer {
+    canvas: Vec<Vertex>
+}
+impl Raytracer {
+    pub fn new() -> Self {
+        Self { canvas: vec![] }
+    }
+    pub fn put_pixel(&mut self, x: f32, y: f32, color: [f32; 3]) {
+        self.canvas.push(Vertex { position: [x, y, 0.0], color });
+    }
+    pub fn get_state(&mut self) -> &[Vertex] {
+        return self.canvas.as_slice();
+    }
+}
+
 pub struct State {
     surface: wgpu::Surface,
     device: wgpu::Device,
@@ -59,7 +69,7 @@ impl State {
     pub fn window(&self) -> &Window {
         &self.window
     }
-    async fn new(window: Window) -> Self {
+    async fn new(window: Window, vertices: &[Vertex]) -> Self {
         let size = window.inner_size();
         let instance_options = wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
@@ -132,7 +142,7 @@ impl State {
             targets: &[Some(color_target_state)]
         };
         let primitive_state = wgpu::PrimitiveState {
-            topology: wgpu::PrimitiveTopology::TriangleList,
+            topology: wgpu::PrimitiveTopology::PointList,
             strip_index_format: None,
             front_face: wgpu::FrontFace::Ccw,
             cull_mode: Some(wgpu::Face::Back),
@@ -158,11 +168,11 @@ impl State {
         let render_pipeline = device.create_render_pipeline(render_pipeline_descriptor);
         let vertex_buffer_descriptor = &wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(VERTICES),
+            contents: bytemuck::cast_slice(vertices),
             usage: wgpu::BufferUsages::VERTEX,
         };
         let vertex_buffer = device.create_buffer_init(vertex_buffer_descriptor);
-        let num_vertices = VERTICES.len() as u32;
+        let num_vertices = vertices.len() as u32;
 
         Self {
             surface,
@@ -240,9 +250,18 @@ impl State {
 pub async fn run() {
     env_logger::init();
     let event_loop = EventLoop::new();
-    let window = WindowBuilder::new().build(&event_loop).unwrap();
+    let window = WindowBuilder::new()
+        .with_title("Raytracer")
+        .with_inner_size(PhysicalSize::new(1600, 1600))
+        .build(&event_loop)
+        .unwrap();
 
-    let mut state = State::new(window).await;
+    let mut raytracer = Raytracer::new();
+    raytracer.put_pixel(0.0, 0.5, [1.0, 1.0, 1.0]);
+    raytracer.put_pixel(-0.5, -0.5,[1.0, 1.0, 1.0]);
+    raytracer.put_pixel(0.5, -0.5,[1.0, 1.0, 1.0]);
+
+    let mut state = State::new(window, raytracer.get_state()).await;
 
     event_loop.run(move |event, _, control_flow|
         match event {
