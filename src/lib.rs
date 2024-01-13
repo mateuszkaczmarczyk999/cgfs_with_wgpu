@@ -46,7 +46,7 @@ impl Vertex {
 struct Sphere {
     radius: f32,
     center: [f32; 3],
-    color: [f32; 3],
+    color: [i32; 3],
 }
 
 impl Sphere {
@@ -87,15 +87,20 @@ impl Raytracer {
     const CANVAS: [i32; 2] = [ 1600, 1600 ];
     // Canvas size
 
-    const BACKGROUND_COLOR: [f32; 3] = [1.0, 1.0, 1.0];
+    const BACKGROUND_COLOR: [i32; 3] = [255, 255, 255];
     // Default color for scene
 
     pub fn new() -> Self {
         Self { state: vec![], scene: vec![] }
     }
-    pub fn put_pixel(&mut self, x: i32, y: i32, color: [f32; 3]) {
+    pub fn put_pixel(&mut self, x: i32, y: i32, rgb: [i32; 3]) {
         let x_cord = x as f32 / (Self::CANVAS[0] / 2) as f32;
         let y_cord = y as f32 / (Self::CANVAS[1] / 2) as f32;
+        let color = [
+            rgb[0] as f32 / 255.0,
+            rgb[1] as f32 / 255.0,
+            rgb[2] as f32 / 255.0,
+        ];
         self.state.push(Vertex { position: [x_cord, y_cord, 0.0], color });
     }
     pub fn get_state(&mut self) -> &[Vertex] {
@@ -124,7 +129,7 @@ impl Raytracer {
         return [x_pos, y_pos, z_pos];
     }
 
-    fn trace_ray(&mut self, direction: [f32; 3], t_min: f32, t_max: f32) -> [f32; 3] {
+    fn trace_ray(&mut self, direction: [f32; 3], t_min: f32, t_max: f32) -> [i32; 3] {
         let mut closest_t = f32::INFINITY;
         let mut closest_sphere: Option<&Sphere> = None;
         let ray_range = (t_min ..= t_max);
@@ -371,25 +376,19 @@ pub async fn run() {
     raytracer.add_to_scene(Sphere {
         radius: 1.0,
         center: [0.0, -1.0, 3.0],
-        color: [1.0, 0.0, 0.0]
-    });
-
-    raytracer.add_to_scene(Sphere {
-        radius: 1.0,
-        center: [0.0, -1.0, 3.0],
-        color: [1.0, 0.0, 0.0]
+        color: [219, 176, 127]
     });
 
     raytracer.add_to_scene(Sphere {
         radius: 1.0,
         center: [2.0, 0.0, 4.0],
-        color: [0.0, 0.0, 1.0]
+        color: [116, 57, 59]
     });
 
     raytracer.add_to_scene(Sphere {
         radius: 1.0,
         center: [-2.0, 0.0, 4.0],
-        color: [0.0, 1.0, 0.0]
+        color: [122, 167, 203]
     });
 
     raytracer.pass();
