@@ -15,6 +15,34 @@ fn dot_product(v1: [f32; 3], v2: [f32; 3]) -> f32 {
     v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2]
 }
 
+fn vector_length(vector: [f32; 3]) -> f32 {
+    (vector[0].powi(2) + vector[1].powi(2) + vector[2].powi(2)).sqrt()
+}
+
+fn vector_subtraction(v1: [f32; 3], v2: [f32; 3]) -> [f32; 3] {
+    [ v1[0] - v2[0], v1[1] - v2[1], v1[2] - v2[2] ]
+}
+
+fn vector_addition(v1: [f32; 3], v2: [f32; 3]) -> [f32; 3] {
+    [ v1[0] + v2[0], v1[1] + v2[1], v1[2] + v2[2] ]
+}
+
+fn scale_vector(v1: [f32; 3], scalar: f32) -> [f32; 3] {
+    [ v1[0] * scalar, v1[1] * scalar, v1[2] * scalar ]
+}
+
+fn divide_vector(v1: [f32; 3], scalar: f32) -> [f32; 3] {
+    [ v1[0] / scalar, v1[1] / scalar, v1[2] / scalar ]
+}
+
+fn color_to_vector(color: [i32; 3]) -> [f32; 3] {
+    [ color[0] as f32, color[1] as f32, color[2] as f32 ]
+}
+
+fn multiply_color(color: [i32; 3], multiplier: f32) {
+
+}
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct Vertex {
@@ -41,6 +69,19 @@ impl Vertex {
             attributes: &Self::ATTRIBS,
         };
     }
+}
+
+enum LightMode {
+    Ambient,
+    Point,
+    Directional,
+}
+
+struct Light {
+    mode: LightMode,
+    intensity: f32,
+    position: [f32; 3],
+    direction: [f32; 3],
 }
 
 struct Sphere {
@@ -71,11 +112,17 @@ impl Sphere {
 
         return (t1, t2);
     }
+
+    pub fn get_normal(&self, position: [f32; 3]) -> [f32; 3] {
+        let normal_vector = vector_subtraction(position, self.center);
+        return divide_vector(normal_vector, vector_length(normal_vector));
+    }
 }
 
 struct Raytracer {
     state: Vec<Vertex>,
     scene: Vec<Sphere>,
+    lights: Vec<Light>,
 }
 impl Raytracer {
     const CAMERA_POSITION: [f32; 3] = [0.0, 0.0, 0.0];
@@ -91,16 +138,13 @@ impl Raytracer {
     // Default color for scene
 
     pub fn new() -> Self {
-        Self { state: vec![], scene: vec![] }
+        Self { state: vec![], scene: vec![], lights: vec![] }
     }
-    pub fn put_pixel(&mut self, x: i32, y: i32, rgb: [i32; 3]) {
+    pub fn put_pixel(&mut self, x: i32, y: i32, rgb: [f32; 3]) {
         let x_cord = x as f32 / (Self::CANVAS[0] / 2) as f32;
         let y_cord = y as f32 / (Self::CANVAS[1] / 2) as f32;
-        let color = [
-            rgb[0] as f32 / 255.0,
-            rgb[1] as f32 / 255.0,
-            rgb[2] as f32 / 255.0,
-        ];
+        let color = [ rgb[0] / 255.0, rgb[1] / 255.0, rgb[2] / 255.0 ];
+
         self.state.push(Vertex { position: [x_cord, y_cord, 0.0], color });
     }
     pub fn get_state(&mut self) -> &[Vertex] {
@@ -112,6 +156,10 @@ impl Raytracer {
 
     pub fn add_to_scene(&mut self, sphere: Sphere) {
         self.scene.push(sphere);
+    }
+
+    pub fn add_light(&mut self, light: Light) {
+        self.lights.push(light);
     }
 
     fn get_canvas_range(&mut self, axis: char) -> RangeInclusive<i32> {
@@ -129,7 +177,36 @@ impl Raytracer {
         return [x_pos, y_pos, z_pos];
     }
 
-    fn trace_ray(&mut self, direction: [f32; 3], t_min: f32, t_max: f32) -> [i32; 3] {
+    fn diffuse_reflection(&self, light_intensity: f32, light_vec: [f32; 3], normal_vec: [f32; 3]) -> f32 {
+        let light_to_surface = dot_product(normal_vec, light_vec);
+        let normalized_vectors = vector_length(normal_vec) * vector_length(light_vec);
+
+        if light_to_surface > 0.0 {
+            return light_intensity * light_to_surface / normalized_vectors;
+        }
+        return 0.0;
+    }
+
+    fn compute_lighting(&self, position: [f32; 3], normal: [f32; 3]) -> f32 {
+        let mut light_accumulator = 0.0;
+        for light in self.lights.iter() {
+            match light.mode {
+                LightMode::Ambient => {
+                    light_accumulator += light.intensity
+                }
+                LightMode::Point => {
+                    let light_vec = vector_subtraction(light.position, position);
+                    light_accumulator += self.diffuse_reflection(light.intensity, light_vec, normal);
+                }
+                LightMode::Directional => {
+                    light_accumulator += self.diffuse_reflection(light.intensity, light.direction, normal);
+                }
+            }
+        }
+        return light_accumulator;
+    }
+
+    fn trace_ray(&mut self, direction: [f32; 3], t_min: f32, t_max: f32) -> [f32; 3] {
         let mut closest_t = f32::INFINITY;
         let mut closest_sphere: Option<&Sphere> = None;
         let ray_range = (t_min ..= t_max);
@@ -149,8 +226,14 @@ impl Raytracer {
         }
 
         match closest_sphere {
-            Some(sphere) => sphere.color,
-            None => Self::BACKGROUND_COLOR,
+            Some(sphere) => {
+                let position = vector_addition(Self::CAMERA_POSITION, scale_vector(direction, closest_t));
+                let normal = sphere.get_normal(position);
+                let light_accumulated = self.compute_lighting(position, normal);
+                let sphere_color = color_to_vector(sphere.color);
+                return scale_vector(sphere_color, light_accumulated);
+            },
+            None => color_to_vector(Self::BACKGROUND_COLOR),
         }
     }
 
@@ -159,6 +242,7 @@ impl Raytracer {
             for y in self.get_canvas_range('y').clone() {
                 let direction = self.canvas_to_viewport(x, y);
                 let color = self.trace_ray(direction, 1.0, f32::INFINITY);
+
                 self.put_pixel(x, y, color);
             }
         }
@@ -373,22 +457,53 @@ pub async fn run() {
         .build(&event_loop)
         .unwrap();
 
+    raytracer.add_light(Light {
+        mode: LightMode::Ambient,
+        intensity: 0.2,
+        position: [0.0, 0.0, 0.0],
+        direction: [0.0, 0.0, 0.0],
+    });
+
+    raytracer.add_light(Light {
+        mode: LightMode::Point,
+        intensity: 0.6,
+        position: [2.0, 1.0, 0.0],
+        direction: [0.0, 0.0, 0.0],
+    });
+
+    raytracer.add_light(Light {
+        mode: LightMode::Directional,
+        intensity: 0.3,
+        position: [0.0, 0.0, 0.0],
+        direction: [1.0, 4.0, 4.0],
+    });
+
+    raytracer.add_to_scene(Sphere {
+        radius: 5000.0,
+        center: [0.0, -5001.0, 3.0],
+        // color: [57, 87, 165]
+        color: [255, 255, 0]
+    });
+
     raytracer.add_to_scene(Sphere {
         radius: 1.0,
         center: [0.0, -1.0, 3.0],
-        color: [219, 176, 127]
+        // color: [219, 176, 127]
+        color: [255, 0, 0]
     });
 
     raytracer.add_to_scene(Sphere {
         radius: 1.0,
         center: [2.0, 0.0, 4.0],
-        color: [116, 57, 59]
+        // color: [116, 57, 59]
+        color: [0, 0, 255]
     });
 
     raytracer.add_to_scene(Sphere {
         radius: 1.0,
         center: [-2.0, 0.0, 4.0],
-        color: [122, 167, 203]
+        // color: [122, 167, 203]
+        color: [0, 255, 0]
     });
 
     raytracer.pass();
