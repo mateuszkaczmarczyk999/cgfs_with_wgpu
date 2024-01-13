@@ -1,4 +1,5 @@
 use std::ffi::c_short;
+use std::ops::RangeInclusive;
 use std::os::unix::raw::dev_t;
 use wgpu::util::DeviceExt;
 use winit::{
@@ -9,6 +10,10 @@ use winit::{
 };
 use winit::window::{Window, WindowId};
 use winit::event::WindowEvent;
+
+fn dot_product(v1: [f32; 3], v2: [f32; 3]) -> f32 {
+    v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2]
+}
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -38,18 +43,121 @@ impl Vertex {
     }
 }
 
+struct Sphere {
+    radius: f32,
+    center: [f32; 3],
+    color: [f32; 3],
+}
+
+impl Sphere {
+    pub fn intersect_ray(&self, camera_origin: [f32; 3], ray_direction: [f32; 3]) -> (f32, f32) {
+        let distance_to_center = [
+            camera_origin[0] - self.center[0],
+            camera_origin[1] - self.center[1],
+            camera_origin[2] - self.center[2],
+        ];
+
+        let a = dot_product(ray_direction, ray_direction);
+        let b = 2.0 * dot_product(distance_to_center, ray_direction);
+        let c = dot_product(distance_to_center, distance_to_center) - self.radius * self.radius;
+        let discriminant = b * b - 4.0 * a * c;
+
+        if discriminant < 0.0 {
+            return (f32::INFINITY, f32::INFINITY);
+        }
+
+        let t1 = (-b + discriminant.sqrt()) / (2.0 * a);
+        let t2 = (-b - discriminant.sqrt()) / (2.0 * a);
+
+        return (t1, t2);
+    }
+}
+
 struct Raytracer {
-    canvas: Vec<Vertex>
+    state: Vec<Vertex>,
+    scene: Vec<Sphere>,
 }
 impl Raytracer {
+    const CAMERA_POSITION: [f32; 3] = [0.0, 0.0, 0.0];
+    // Camera 3D position
+
+    const VIEWPORT: [f32; 3] = [1.0, 1.0, 1.0];
+    // Viewport width, height and depth which is camera distance
+
+    const CANVAS: [i32; 2] = [ 1600, 1600 ];
+    // Canvas size
+
+    const BACKGROUND_COLOR: [f32; 3] = [1.0, 1.0, 1.0];
+    // Default color for scene
+
     pub fn new() -> Self {
-        Self { canvas: vec![] }
+        Self { state: vec![], scene: vec![] }
     }
-    pub fn put_pixel(&mut self, x: f32, y: f32, color: [f32; 3]) {
-        self.canvas.push(Vertex { position: [x, y, 0.0], color });
+    pub fn put_pixel(&mut self, x: i32, y: i32, color: [f32; 3]) {
+        let x_cord = x as f32 / (Self::CANVAS[0] / 2) as f32;
+        let y_cord = y as f32 / (Self::CANVAS[1] / 2) as f32;
+        self.state.push(Vertex { position: [x_cord, y_cord, 0.0], color });
     }
     pub fn get_state(&mut self) -> &[Vertex] {
-        return self.canvas.as_slice();
+        return self.state.as_slice();
+    }
+    pub fn get_canvas_size(&mut self) -> [i32; 2] {
+        return Self::CANVAS;
+    }
+
+    pub fn add_to_scene(&mut self, sphere: Sphere) {
+        self.scene.push(sphere);
+    }
+
+    fn get_canvas_range(&mut self, axis: char) -> RangeInclusive<i32> {
+        match axis {
+            'x' => { ( -Self::CANVAS[0]/2 ..= Self::CANVAS[0]/2 ) },
+            'y' => { ( -Self::CANVAS[1]/2 ..= Self::CANVAS[1]/2 ) },
+            _ => { ( -1 ..= 1 ) }
+        }
+    }
+
+    fn canvas_to_viewport(&mut self, x: i32, y: i32) -> [f32; 3] {
+        let x_pos = x as f32 * Self::VIEWPORT[0] / Self::CANVAS[0] as f32;
+        let y_pos = y as f32 * Self::VIEWPORT[1] / Self::CANVAS[1] as f32;
+        let z_pos = Self::VIEWPORT[2];
+        return [x_pos, y_pos, z_pos];
+    }
+
+    fn trace_ray(&mut self, direction: [f32; 3], t_min: f32, t_max: f32) -> [f32; 3] {
+        let mut closest_t = f32::INFINITY;
+        let mut closest_sphere: Option<&Sphere> = None;
+        let ray_range = (t_min ..= t_max);
+
+        for sphere in self.scene.iter() {
+            let (t1, t2) = sphere.intersect_ray(Self::CAMERA_POSITION, direction);
+
+            if ray_range.contains(&t1) && t1 < closest_t {
+                closest_t = t1;
+                closest_sphere = Some(sphere);
+            }
+
+            if ray_range.contains(&t2) && t2 < closest_t {
+                closest_t = t1;
+                closest_sphere = Some(sphere);
+            }
+        }
+
+        match closest_sphere {
+            Some(sphere) => sphere.color,
+            None => Self::BACKGROUND_COLOR,
+        }
+    }
+
+    pub fn pass(&mut self) {
+        for x in self.get_canvas_range('x').clone() {
+            for y in self.get_canvas_range('y').clone() {
+                let direction = self.canvas_to_viewport(x, y);
+                let color = self.trace_ray(direction, 1.0, f32::INFINITY);
+                self.put_pixel(x, y, color);
+            }
+        }
+
     }
 }
 
@@ -248,18 +356,43 @@ impl State {
 }
 
 pub async fn run() {
+    let mut raytracer = Raytracer::new();
+
     env_logger::init();
     let event_loop = EventLoop::new();
+    let canvas_size = raytracer.get_canvas_size();
+    let window_size = PhysicalSize::new(canvas_size[0], canvas_size[1]);
     let window = WindowBuilder::new()
         .with_title("Raytracer")
-        .with_inner_size(PhysicalSize::new(1600, 1600))
+        .with_inner_size(window_size)
         .build(&event_loop)
         .unwrap();
 
-    let mut raytracer = Raytracer::new();
-    raytracer.put_pixel(0.0, 0.5, [1.0, 1.0, 1.0]);
-    raytracer.put_pixel(-0.5, -0.5,[1.0, 1.0, 1.0]);
-    raytracer.put_pixel(0.5, -0.5,[1.0, 1.0, 1.0]);
+    raytracer.add_to_scene(Sphere {
+        radius: 1.0,
+        center: [0.0, -1.0, 3.0],
+        color: [1.0, 0.0, 0.0]
+    });
+
+    raytracer.add_to_scene(Sphere {
+        radius: 1.0,
+        center: [0.0, -1.0, 3.0],
+        color: [1.0, 0.0, 0.0]
+    });
+
+    raytracer.add_to_scene(Sphere {
+        radius: 1.0,
+        center: [2.0, 0.0, 4.0],
+        color: [0.0, 0.0, 1.0]
+    });
+
+    raytracer.add_to_scene(Sphere {
+        radius: 1.0,
+        center: [-2.0, 0.0, 4.0],
+        color: [0.0, 1.0, 0.0]
+    });
+
+    raytracer.pass();
 
     let mut state = State::new(window, raytracer.get_state()).await;
 
