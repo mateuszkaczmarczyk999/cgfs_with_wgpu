@@ -39,8 +39,8 @@ fn color_to_vector(color: [i32; 3]) -> [f32; 3] {
     [ color[0] as f32, color[1] as f32, color[2] as f32 ]
 }
 
-fn multiply_color(color: [i32; 3], multiplier: f32) {
-
+fn reverse_vector(v1: [f32; 3]) -> [f32; 3]  {
+    [ v1[0] * -1.0, v1[1] * -1.0, v1[2] * -1.0 ]
 }
 
 #[repr(C)]
@@ -88,6 +88,7 @@ struct Sphere {
     radius: f32,
     center: [f32; 3],
     color: [i32; 3],
+    specular: f32,
 }
 
 impl Sphere {
@@ -187,7 +188,19 @@ impl Raytracer {
         return 0.0;
     }
 
-    fn compute_lighting(&self, position: [f32; 3], normal: [f32; 3]) -> f32 {
+    fn specular_reflection(&self, light_intensity: f32, light_vec: [f32; 3], normal_vec: [f32; 3], bounce_vec: [f32; 3], specular_scale: f32) -> f32 {
+        let light_to_surface = dot_product(normal_vec, light_vec);
+        let reflection = vector_subtraction(scale_vector(normal_vec, 2.0 * light_to_surface), light_vec);
+        let reflection_offset = dot_product(reflection, bounce_vec);
+        let normalized_vectors = vector_length(reflection) * vector_length(bounce_vec);
+
+        if reflection_offset > 0.0 {
+            return light_intensity * (reflection_offset / normalized_vectors).powf(specular_scale);
+        }
+        return 0.0;
+    }
+
+    fn compute_lighting(&self, position: [f32; 3], normal: [f32; 3], bounce: [f32; 3], specular: f32) -> f32 {
         let mut light_accumulator = 0.0;
         for light in self.lights.iter() {
             match light.mode {
@@ -197,9 +210,11 @@ impl Raytracer {
                 LightMode::Point => {
                     let light_vec = vector_subtraction(light.position, position);
                     light_accumulator += self.diffuse_reflection(light.intensity, light_vec, normal);
+                    light_accumulator += self.specular_reflection(light.intensity, light_vec, normal, bounce, specular);
                 }
                 LightMode::Directional => {
                     light_accumulator += self.diffuse_reflection(light.intensity, light.direction, normal);
+                    light_accumulator += self.specular_reflection(light.intensity, light.direction, normal, bounce, specular);
                 }
             }
         }
@@ -229,7 +244,8 @@ impl Raytracer {
             Some(sphere) => {
                 let position = vector_addition(Self::CAMERA_POSITION, scale_vector(direction, closest_t));
                 let normal = sphere.get_normal(position);
-                let light_accumulated = self.compute_lighting(position, normal);
+                let reversed_direction = reverse_vector(direction);
+                let light_accumulated = self.compute_lighting(position, normal, reversed_direction, sphere.specular);
                 let sphere_color = color_to_vector(sphere.color);
                 return scale_vector(sphere_color, light_accumulated);
             },
@@ -482,28 +498,32 @@ pub async fn run() {
         radius: 5000.0,
         center: [0.0, -5001.0, 3.0],
         // color: [57, 87, 165]
-        color: [255, 255, 0]
+        color: [255, 255, 0],
+        specular: 1000.0,
     });
 
     raytracer.add_to_scene(Sphere {
         radius: 1.0,
         center: [0.0, -1.0, 3.0],
         // color: [219, 176, 127]
-        color: [255, 0, 0]
+        color: [255, 0, 0],
+        specular: 600.0,
     });
 
     raytracer.add_to_scene(Sphere {
         radius: 1.0,
         center: [2.0, 0.0, 4.0],
         // color: [116, 57, 59]
-        color: [0, 0, 255]
+        color: [0, 0, 255],
+        specular: 400.0,
     });
 
     raytracer.add_to_scene(Sphere {
         radius: 1.0,
         center: [-2.0, 0.0, 4.0],
         // color: [122, 167, 203]
-        color: [0, 255, 0]
+        color: [0, 255, 0],
+        specular: 10.0,
     });
 
     raytracer.pass();
