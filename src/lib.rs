@@ -89,6 +89,7 @@ struct Sphere {
     center: [f32; 3],
     color: [i32; 3],
     specular: f32,
+    reflective: f32,
 }
 
 impl Sphere {
@@ -131,7 +132,7 @@ impl Raytracer {
     const CANVAS: [i32; 2] = [ 1600, 1600 ];
     // Canvas size
 
-    const BACKGROUND_COLOR: [i32; 3] = [255, 255, 255];
+    const BACKGROUND_COLOR: [i32; 3] = [0, 0, 0];
     // Default color for scene
 
     pub fn new() -> Self {
@@ -184,9 +185,14 @@ impl Raytracer {
         return 0.0;
     }
 
+    fn reflect_ray(&self, ray: [f32; 3], normal: [f32; 3]) -> [f32; 3] {
+        let projection_scale = dot_product(normal, ray);
+        let translation = scale_vector(normal, 2.0 * projection_scale);
+        return vector_subtraction(translation, ray);
+    }
+
     fn specular_reflection(&self, light_intensity: f32, light_vec: [f32; 3], normal_vec: [f32; 3], bounce_vec: [f32; 3], specular_scale: f32) -> f32 {
-        let light_to_surface = dot_product(normal_vec, light_vec);
-        let reflection = vector_subtraction(scale_vector(normal_vec, 2.0 * light_to_surface), light_vec);
+        let reflection = self.reflect_ray(light_vec, normal_vec);
         let reflection_offset = dot_product(reflection, bounce_vec);
         let normalized_vectors = vector_length(reflection) * vector_length(bounce_vec);
 
@@ -194,6 +200,12 @@ impl Raytracer {
             return light_intensity * (reflection_offset / normalized_vectors).powf(specular_scale);
         }
         return 0.0;
+    }
+
+    fn add_reflection(&self, color: [f32; 3], reflection: [f32; 3], reflective: f32) -> [f32; 3] {
+        let base_color = scale_vector(color, 1.0 - reflective);
+        let translation = scale_vector(reflection, reflective);
+        return vector_addition(base_color, translation);
     }
 
     fn compute_lighting(&self, position: [f32; 3], normal: [f32; 3], bounce: [f32; 3], specular: f32) -> f32 {
@@ -250,9 +262,9 @@ impl Raytracer {
         return (closest_sphere, closest_t)
     }
 
-    fn trace_ray(&mut self, direction: [f32; 3], t_min: f32, t_max: f32) -> [f32; 3] {
+    fn trace_ray(&self, origin: [f32; 3], direction: [f32; 3], t_min: f32, t_max: f32, depth: u32) -> [f32; 3] {
         let ray_range = (t_min ..= t_max);
-        let (closest_sphere, closest_t) = self.closest_intersection(Self::CAMERA_POSITION, direction, ray_range);
+        let (closest_sphere, closest_t) = self.closest_intersection(origin, direction, ray_range);
 
         match closest_sphere {
             Some(sphere) => {
@@ -261,7 +273,14 @@ impl Raytracer {
                 let reversed_direction = reverse_vector(direction);
                 let light_accumulated = self.compute_lighting(position, normal, reversed_direction, sphere.specular);
                 let sphere_color = color_to_vector(sphere.color);
-                return scale_vector(sphere_color, light_accumulated);
+                let local_color = scale_vector(sphere_color, light_accumulated);
+
+                if sphere.reflective <= 0.0 || depth <= 0 { return local_color; }
+
+                let reflected_ray = self.reflect_ray(reversed_direction, normal);
+                let reflected_color = self.trace_ray(position, reflected_ray, 0.001, f32::INFINITY, depth - 1);
+
+                return self.add_reflection(local_color, reflected_color, sphere.reflective);
             },
             None => color_to_vector(Self::BACKGROUND_COLOR),
         }
@@ -271,12 +290,10 @@ impl Raytracer {
         for x in self.get_canvas_range('x').clone() {
             for y in self.get_canvas_range('y').clone() {
                 let direction = self.canvas_to_viewport(x, y);
-                let color = self.trace_ray(direction, 1.0, f32::INFINITY);
-
+                let color = self.trace_ray(Self::CAMERA_POSITION, direction, 1.0, f32::INFINITY, 2);
                 self.put_pixel(x, y, color);
             }
         }
-
     }
 }
 
@@ -489,21 +506,21 @@ pub async fn run() {
 
     raytracer.add_light(Light {
         mode: LightMode::Ambient,
-        intensity: 0.2,
+        intensity: 0.1,
         position: [0.0, 0.0, 0.0],
         direction: [0.0, 0.0, 0.0],
     });
 
     raytracer.add_light(Light {
         mode: LightMode::Point,
-        intensity: 0.6,
+        intensity: 0.4,
         position: [2.0, 1.0, 0.0],
         direction: [0.0, 0.0, 0.0],
     });
 
     raytracer.add_light(Light {
         mode: LightMode::Directional,
-        intensity: 0.3,
+        intensity: 0.2,
         position: [0.0, 0.0, 0.0],
         direction: [1.0, 4.0, 4.0],
     });
@@ -511,33 +528,37 @@ pub async fn run() {
     raytracer.add_to_scene(Sphere {
         radius: 1.0,
         center: [0.0, -1.0, 3.0],
-        // color: [219, 176, 127]
+        // color: [219, 176, 127],
         color: [255, 0, 0],
         specular: 600.0,
+        reflective: 0.1,
     });
 
     raytracer.add_to_scene(Sphere {
         radius: 1.0,
         center: [2.0, 0.0, 4.0],
-        // color: [116, 57, 59]
+        // color: [116, 57, 59],
         color: [0, 0, 255],
         specular: 400.0,
+        reflective: 0.2,
     });
 
     raytracer.add_to_scene(Sphere {
         radius: 1.0,
         center: [-2.0, 0.0, 4.0],
-        // color: [122, 167, 203]
+        // color: [122, 167, 203],
         color: [0, 255, 0],
         specular: 10.0,
+        reflective: 0.3,
     });
 
     raytracer.add_to_scene(Sphere {
         radius: 5000.0,
         center: [0.0, -5001.0, 3.0],
-        // color: [57, 87, 165]
+        // color: [57, 87, 165],
         color: [255, 255, 0],
         specular: 1000.0,
+        reflective: 0.4,
     });
 
     raytracer.pass();
