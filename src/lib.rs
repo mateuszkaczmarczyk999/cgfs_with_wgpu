@@ -43,6 +43,14 @@ fn reverse_vector(v1: [f32; 3]) -> [f32; 3]  {
     [ v1[0] * -1.0, v1[1] * -1.0, v1[2] * -1.0 ]
 }
 
+fn multiply_color(color: [f32; 3], factor: f32) -> [f32; 3] {
+    [
+        (color[0] * factor).clamp(0.0, 255.0),
+        (color[1] * factor).clamp(0.0, 255.0),
+        (color[2] * factor).clamp(0.0, 255.0),
+    ]
+}
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct Vertex {
@@ -143,7 +151,9 @@ impl Raytracer {
         let y_cord = y as f32 / (Self::CANVAS[1] / 2) as f32;
         let color = [ rgb[0] / 255.0, rgb[1] / 255.0, rgb[2] / 255.0 ];
 
-        self.state.push(Vertex { position: [x_cord, y_cord, 0.0], color });
+        let result = multiply_color(color, 0.78);
+
+        self.state.push(Vertex { position: [x_cord, y_cord, 0.0], color: result });
     }
     pub fn get_state(&mut self) -> &[Vertex] {
         return self.state.as_slice();
