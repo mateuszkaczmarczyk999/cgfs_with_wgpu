@@ -205,28 +205,24 @@ impl Raytracer {
                 }
                 LightMode::Point => {
                     let light_vec = vector_subtraction(light.position, position);
-                    light_accumulator += self.diffuse_reflection(light.intensity, light_vec, normal);
-                    light_accumulator += self.specular_reflection(light.intensity, light_vec, normal, bounce, specular);
-                    // let (shadow_sphere, _) = self.closest_intersection(position, light_vec, (0.001 ..= 1.0));
-                    // match shadow_sphere {
-                    //     None => { continue }
-                    //     Some(_) => {
-                    //         light_accumulator += self.diffuse_reflection(light.intensity, light_vec, normal);
-                    //         light_accumulator += self.specular_reflection(light.intensity, light_vec, normal, bounce, specular);
-                    //     }
-                    // }
+                    let (shadow_sphere, _) = self.closest_intersection(position, light_vec, (0.001 ..= 1.0));
+                    match shadow_sphere {
+                        None => {
+                            light_accumulator += self.diffuse_reflection(light.intensity, light_vec, normal);
+                            light_accumulator += self.specular_reflection(light.intensity, light_vec, normal, bounce, specular);
+                        }
+                        Some(_) => { continue; }
+                    }
                 }
                 LightMode::Directional => {
-                    light_accumulator += self.diffuse_reflection(light.intensity, light.direction, normal);
-                    light_accumulator += self.specular_reflection(light.intensity, light.direction, normal, bounce, specular);
-                    // let (shadow_sphere, _) = self.closest_intersection(position, light.direction, (0.001 ..= f32::INFINITY));
-                    // match shadow_sphere {
-                    //     None => { continue }
-                    //     Some(_) => {
-                    //         light_accumulator += self.diffuse_reflection(light.intensity, light.direction, normal);
-                    //         light_accumulator += self.specular_reflection(light.intensity, light.direction, normal, bounce, specular);
-                    //     }
-                    // }
+                    let (shadow_sphere, _) = self.closest_intersection(position, light.direction, (0.001 ..= f32::INFINITY));
+                    match shadow_sphere {
+                        None => {
+                            light_accumulator += self.diffuse_reflection(light.intensity, light.direction, normal);
+                            light_accumulator += self.specular_reflection(light.intensity, light.direction, normal, bounce, specular);
+                        }
+                        Some(_) => { continue; }
+                    }
                 }
             }
         }
