@@ -93,11 +93,7 @@ struct Sphere {
 
 impl Sphere {
     pub fn intersect_ray(&self, camera_origin: [f32; 3], ray_direction: [f32; 3]) -> (f32, f32) {
-        let distance_to_center = [
-            camera_origin[0] - self.center[0],
-            camera_origin[1] - self.center[1],
-            camera_origin[2] - self.center[2],
-        ];
+        let distance_to_center = vector_subtraction(camera_origin, self.center);
 
         let a = dot_product(ray_direction, ray_direction);
         let b = 2.0 * dot_product(distance_to_center, ray_direction);
@@ -211,23 +207,38 @@ impl Raytracer {
                     let light_vec = vector_subtraction(light.position, position);
                     light_accumulator += self.diffuse_reflection(light.intensity, light_vec, normal);
                     light_accumulator += self.specular_reflection(light.intensity, light_vec, normal, bounce, specular);
+                    // let (shadow_sphere, _) = self.closest_intersection(position, light_vec, (0.001 ..= 1.0));
+                    // match shadow_sphere {
+                    //     None => { continue }
+                    //     Some(_) => {
+                    //         light_accumulator += self.diffuse_reflection(light.intensity, light_vec, normal);
+                    //         light_accumulator += self.specular_reflection(light.intensity, light_vec, normal, bounce, specular);
+                    //     }
+                    // }
                 }
                 LightMode::Directional => {
                     light_accumulator += self.diffuse_reflection(light.intensity, light.direction, normal);
                     light_accumulator += self.specular_reflection(light.intensity, light.direction, normal, bounce, specular);
+                    // let (shadow_sphere, _) = self.closest_intersection(position, light.direction, (0.001 ..= f32::INFINITY));
+                    // match shadow_sphere {
+                    //     None => { continue }
+                    //     Some(_) => {
+                    //         light_accumulator += self.diffuse_reflection(light.intensity, light.direction, normal);
+                    //         light_accumulator += self.specular_reflection(light.intensity, light.direction, normal, bounce, specular);
+                    //     }
+                    // }
                 }
             }
         }
         return light_accumulator;
     }
 
-    fn trace_ray(&mut self, direction: [f32; 3], t_min: f32, t_max: f32) -> [f32; 3] {
+    fn closest_intersection(&self, origin: [f32; 3], direction: [f32; 3], ray_range: RangeInclusive<f32>) -> (Option<&Sphere>, f32) {
         let mut closest_t = f32::INFINITY;
         let mut closest_sphere: Option<&Sphere> = None;
-        let ray_range = (t_min ..= t_max);
 
         for sphere in self.scene.iter() {
-            let (t1, t2) = sphere.intersect_ray(Self::CAMERA_POSITION, direction);
+            let (t1, t2) = sphere.intersect_ray(origin, direction);
 
             if ray_range.contains(&t1) && t1 < closest_t {
                 closest_t = t1;
@@ -235,10 +246,17 @@ impl Raytracer {
             }
 
             if ray_range.contains(&t2) && t2 < closest_t {
-                closest_t = t1;
+                closest_t = t2;
                 closest_sphere = Some(sphere);
             }
         }
+
+        return (closest_sphere, closest_t)
+    }
+
+    fn trace_ray(&mut self, direction: [f32; 3], t_min: f32, t_max: f32) -> [f32; 3] {
+        let ray_range = (t_min ..= t_max);
+        let (closest_sphere, closest_t) = self.closest_intersection(Self::CAMERA_POSITION, direction, ray_range);
 
         match closest_sphere {
             Some(sphere) => {
@@ -495,14 +513,6 @@ pub async fn run() {
     });
 
     raytracer.add_to_scene(Sphere {
-        radius: 5000.0,
-        center: [0.0, -5001.0, 3.0],
-        // color: [57, 87, 165]
-        color: [255, 255, 0],
-        specular: 1000.0,
-    });
-
-    raytracer.add_to_scene(Sphere {
         radius: 1.0,
         center: [0.0, -1.0, 3.0],
         // color: [219, 176, 127]
@@ -524,6 +534,14 @@ pub async fn run() {
         // color: [122, 167, 203]
         color: [0, 255, 0],
         specular: 10.0,
+    });
+
+    raytracer.add_to_scene(Sphere {
+        radius: 5000.0,
+        center: [0.0, -5001.0, 3.0],
+        // color: [57, 87, 165]
+        color: [255, 255, 0],
+        specular: 1000.0,
     });
 
     raytracer.pass();
