@@ -37,3 +37,18 @@ pub fn multiply_color(color: [f32; 3], factor: f32) -> [f32; 3] {
         (color[2] * factor).clamp(0.0, 255.0),
     ]
 }
+
+pub fn interpolate(start_idx: i32, start_val: f32, end_idx: i32, end_val: f32) -> Vec<i32> {
+    if start_idx == end_idx { return vec![start_val as i32]; }
+
+    let mut values = Vec::new();
+    let step = (end_val - start_val) / (end_idx - start_idx) as f32;
+    let mut value = start_val;
+
+    for _ in start_idx ..= end_idx {
+        values.push(value.round() as i32);
+        value += step;
+    }
+
+    return values;
+}

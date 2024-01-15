@@ -1,6 +1,7 @@
 mod utilities;
 mod raytracer;
 mod geometry;
+mod rasterizer;
 
 use wgpu::util::DeviceExt;
 use winit::{
@@ -14,6 +15,7 @@ use winit::event::WindowEvent;
 
 use geometry::{ Vertex };
 use raytracer::{ Raytracer, init_raytracer };
+use rasterizer::{ Rasterizer, init_rasterizer };
 
 pub struct State {
     surface: wgpu::Surface,
@@ -212,7 +214,7 @@ impl State {
 pub async fn run() {
     env_logger::init();
     let event_loop = EventLoop::new();
-    let canvas_size = Raytracer::CANVAS;
+    let canvas_size = Rasterizer::CANVAS;
     let window_size = PhysicalSize::new(canvas_size[0], canvas_size[1]);
     let window = WindowBuilder::new()
         .with_title("Raytracer")
@@ -220,8 +222,12 @@ pub async fn run() {
         .build(&event_loop)
         .unwrap();
 
-    let mut raytracer = init_raytracer();
-    let vertices = raytracer.get_state();
+    // let mut raytracer = init_raytracer();
+    // let vertices = raytracer.get_state();
+    // let mut state = State::new(window, vertices).await;
+
+    let mut rasterizer = init_rasterizer();
+    let vertices = rasterizer.get_state();
     let mut state = State::new(window, vertices).await;
 
     event_loop.run(move |event, _, control_flow|
