@@ -43,20 +43,51 @@ impl Rasterizer {
     }
 
     pub fn draw_wireframe_triangle(&mut self, point_a: [i32; 2], point_b: [i32; 2], point_c: [i32; 2], rgb: [f32; 3]) {
-        self.draw_line(point_a, point_b, [0.0, 0.0, 0.0]);
-        self.draw_line(point_b, point_c, [0.0, 0.0, 0.0]);
-        self.draw_line(point_c, point_a, [0.0, 0.0, 0.0]);
+        self.draw_line(point_a, point_b, rgb);
+        self.draw_line(point_b, point_c, rgb);
+        self.draw_line(point_c, point_a, rgb);
+    }
+
+    pub fn draw_filled_triangle(&mut self, point_a: [i32; 2], point_b: [i32; 2], point_c: [i32; 2], rgb: [f32; 3]) {
+        let mut a = point_a;
+        let mut b = point_b;
+        let mut c = point_c;
+
+        if b[1] < a[1] { std::mem::swap(&mut b, &mut a); }
+        if c[1] < a[1] { std::mem::swap(&mut c, &mut a); }
+        if c[1] < b[1] { std::mem::swap(&mut c, &mut b); }
+
+        let mut x_vals_a_to_b = interpolate(a[1], a[0] as f32, b[1], b[0] as f32);
+        let mut x_vals_b_to_c = interpolate(b[1], b[0] as f32, c[1], c[0] as f32);
+        let mut x_vals_a_to_c = interpolate(a[1], a[0] as f32, c[1], c[0] as f32);
+
+        let _ = x_vals_a_to_b.pop();
+        let shot_sides = [&x_vals_a_to_b[..], &x_vals_b_to_c[..]].concat();
+
+        let mid_idx = shot_sides.len() / 2;
+        let short_sides_on_the_right = x_vals_a_to_c[mid_idx] < shot_sides[mid_idx];
+        let (x_left, x_right) =
+            if short_sides_on_the_right { (x_vals_a_to_c, shot_sides) }
+            else { (shot_sides, x_vals_a_to_c) };
+
+        for y in a[1] ..= c[1] {
+            let inverse_idx = (y - a[1]) as usize;
+            for x in x_left[inverse_idx] ..= x_right[inverse_idx] {
+                self.put_pixel(x, y, rgb);
+            }
+        }
     }
 }
 
 pub fn init_rasterizer() -> Rasterizer {
     let mut rasterizer = Rasterizer::new();
 
-    let point_a = [-200, -100];
-    let point_b = [240, 120];
-    let point_c = [-50, -200];
+    let point_a = [-700, 600];
+    let point_b = [540, 120];
+    let point_c = [-50, -700];
 
     rasterizer.draw_wireframe_triangle(point_a, point_b, point_c, [0.0, 0.0, 0.0]);
+    rasterizer.draw_filled_triangle(point_a, point_b, point_c, [0.0, 255.0, 0.0]);
 
     return rasterizer;
 }
