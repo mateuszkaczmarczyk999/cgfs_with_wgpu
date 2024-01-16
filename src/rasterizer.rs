@@ -1,5 +1,5 @@
 use crate::geometry::{ Vertex };
-use crate::utilities::{ interpolate };
+use crate::utilities::{interpolate, multiply_color};
 
 pub struct Rasterizer {
     state: Vec<Vertex>,
@@ -57,23 +57,51 @@ impl Rasterizer {
         if c[1] < a[1] { std::mem::swap(&mut c, &mut a); }
         if c[1] < b[1] { std::mem::swap(&mut c, &mut b); }
 
+        let mut shade: [f32; 3] = [10.0, 0.0, 100.0];
+
         let mut x_vals_a_to_b = interpolate(a[1], a[0] as f32, b[1], b[0] as f32);
+        let mut shade_a_to_b = interpolate(a[1], shade[0], b[1], shade[1]);
+
         let mut x_vals_b_to_c = interpolate(b[1], b[0] as f32, c[1], c[0] as f32);
+        let mut shade_b_to_c = interpolate(b[1], shade[1], c[1], shade[2]);
+
         let mut x_vals_a_to_c = interpolate(a[1], a[0] as f32, c[1], c[0] as f32);
+        let mut shade_a_to_c = interpolate(a[1], shade[0], c[1], shade[2]);
 
         let _ = x_vals_a_to_b.pop();
-        let shot_sides = [&x_vals_a_to_b[..], &x_vals_b_to_c[..]].concat();
+        let short_sides = [&x_vals_a_to_b[..], &x_vals_b_to_c[..]].concat();
 
-        let mid_idx = shot_sides.len() / 2;
-        let short_sides_on_the_right = x_vals_a_to_c[mid_idx] < shot_sides[mid_idx];
-        let (x_left, x_right) =
-            if short_sides_on_the_right { (x_vals_a_to_c, shot_sides) }
-            else { (shot_sides, x_vals_a_to_c) };
+        let _ = shade_a_to_b.pop();
+        let shade_short_sides = [&shade_a_to_b[..], &shade_b_to_c[..]].concat();
+
+        let mid_idx = short_sides.len() / 2;
+        let short_sides_on_the_right = x_vals_a_to_c[mid_idx] < short_sides[mid_idx];
+        let (x_left, x_right, shade_left, shade_right) =
+            if short_sides_on_the_right {
+                (x_vals_a_to_c, short_sides, shade_a_to_c, shade_short_sides)
+            }
+            else {
+                (short_sides, x_vals_a_to_c, shade_short_sides, shade_a_to_c)
+            };
 
         for y in a[1] ..= c[1] {
-            let inverse_idx = (y - a[1]) as usize;
-            for x in x_left[inverse_idx] ..= x_right[inverse_idx] {
-                self.put_pixel(x, y, rgb);
+            let inverse_y_idx = (y - a[1]) as usize;
+            let x_left_edge = x_left[inverse_y_idx];
+            let x_right_edge = x_right[inverse_y_idx];
+
+            let x_shades = interpolate(
+                x_left_edge,
+                shade_left[inverse_y_idx] as f32,
+                x_right_edge,
+                shade_right[inverse_y_idx] as f32,
+            );
+
+            for x in x_left_edge ..= x_right_edge {
+                let inverse_x_idx = (x - x_left_edge) as usize;
+
+                let shade_factor: f32 = x_shades[inverse_x_idx] as f32 / 100.0;
+                let shaded_color = multiply_color(rgb, shade_factor);
+                self.put_pixel(x, y, shaded_color);
             }
         }
     }
