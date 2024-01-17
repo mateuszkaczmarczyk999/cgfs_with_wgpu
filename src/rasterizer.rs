@@ -1,5 +1,10 @@
 use crate::geometry::{ Vertex };
-use crate::utilities::{interpolate, multiply_color};
+use crate::utilities::{interpolate, multiply_color, vector_addition};
+
+pub struct Triangle {
+    group: [usize; 3],
+    color: [f32; 3],
+}
 
 pub struct Rasterizer {
     state: Vec<Vertex>,
@@ -18,7 +23,25 @@ impl Rasterizer {
         Self { state: vec![] }
     }
 
-    pub fn project_vertex(&mut self, vertex: [f32; 3]) -> [i32; 2] {
+    fn render_triangle(&mut self, indices: [usize; 3], projection: Vec<[i32; 2]>, rgb: [f32; 3]) {
+        let point_a = projection[indices[0]];
+        let point_b = projection[indices[1]];
+        let point_c = projection[indices[2]];
+        self.draw_wireframe_triangle(point_a, point_b, point_c, rgb);
+    }
+
+    fn render_object(&mut self, vertices: Vec<[f32; 3]>, geometries: Vec<Triangle>) {
+        let mut projection: Vec<[i32; 2]> = vec![];
+
+        for vertex in vertices.iter() {
+            projection.push(self.project_vertex(vertex))
+        }
+        for geometry in geometries.iter() {
+            self.render_triangle(geometry.group, projection.clone(), geometry.color);
+        }
+    }
+
+    pub fn project_vertex(&mut self, vertex: &[f32; 3]) -> [i32; 2] {
         fn viewport_to_canvas(x: f32, y: f32) -> [i32; 2] {
             let x_pos = x * Rasterizer::CANVAS[0] as f32 / Rasterizer::VIEWPORT[0] as f32;
             let y_pos = y * Rasterizer::CANVAS[1] as f32 / Rasterizer::VIEWPORT[1] as f32;
@@ -34,6 +57,7 @@ impl Rasterizer {
     pub fn get_state(&mut self) -> &[Vertex] {
         return self.state.as_slice();
     }
+
     pub fn put_pixel(&mut self, x: i32, y: i32, rgb: [f32; 3]) {
         let x_cord = x as f32 / (Self::CANVAS[0] / 2) as f32;
         let y_cord = y as f32 / (Self::CANVAS[1] / 2) as f32;
@@ -130,56 +154,44 @@ impl Rasterizer {
 pub fn init_rasterizer() -> Rasterizer {
     let mut rasterizer = Rasterizer::new();
 
-    // let point_a = [-700, 600];
-    // let point_b = [540, 120];
-    // let point_c = [-50, -700];
-    //
-    // rasterizer.draw_wireframe_triangle(point_a, point_b, point_c, [0.0, 0.0, 0.0]);
-    // rasterizer.draw_filled_triangle(point_a, point_b, point_c, [0.0, 255.0, 0.0]);
-
-    // The four "front" vertices
-    let vAf = [-2.0, -0.5, 5.0];
-    let vBf = [-2.0,  0.5, 5.0];
-    let vCf = [-1.0,  0.5, 5.0];
-    let vDf = [-1.0, -0.5, 5.0];
-
-    // The four "back" vertices
-    let vAb = [-2.0, -0.5, 6.0];
-    let vBb = [-2.0,  0.5, 6.0];
-    let vCb = [-1.0,  0.5, 6.0];
-    let vDb = [-1.0, -0.5, 6.0];
-
-    const PURPLE: [f32; 3] = [255.0, 0.0, 255.0];
     const RED: [f32; 3] = [255.0, 0.0, 0.0];
     const GREEN: [f32; 3] = [0.0, 255.0, 0.0];
+    const BLUE: [f32; 3] = [0.0, 0.0, 255.0];
+    const PURPLE: [f32; 3] = [255.0, 0.0, 255.0];
+    const YELLOW: [f32; 3] = [255.0, 255.0, 0.0];
+    const CYAN: [f32; 3] = [0.0, 255.0, 255.0];
 
-    let a = rasterizer.project_vertex(vAf);
-    let b = rasterizer.project_vertex(vBf);
-    let c = rasterizer.project_vertex(vCf);
-    let d = rasterizer.project_vertex(vDf);
+    let mut vertices: Vec<[f32; 3]> = vec![];
+    vertices.push([ 1.0,  1.0,  1.0]);
+    vertices.push([-1.0,  1.0,  1.0]);
+    vertices.push([-1.0, -1.0,  1.0]);
+    vertices.push([ 1.0, -1.0,  1.0]);
+    vertices.push([ 1.0,  1.0, -1.0]);
+    vertices.push([-1.0,  1.0, -1.0]);
+    vertices.push([-1.0, -1.0, -1.0]);
+    vertices.push([ 1.0, -1.0, -1.0]);
 
-    let e = rasterizer.project_vertex(vAb);
-    let f = rasterizer.project_vertex(vBb);
-    let g = rasterizer.project_vertex(vCb);
-    let h = rasterizer.project_vertex(vDb);
+    let mut triangles: Vec<Triangle> = vec![];
+    triangles.push(Triangle { group: [0, 1, 2], color: RED });
+    triangles.push(Triangle { group: [0, 2, 3], color: RED });
+    triangles.push(Triangle { group: [4, 0, 3], color: GREEN });
+    triangles.push(Triangle { group: [4, 3, 7], color: GREEN });
+    triangles.push(Triangle { group: [5, 4, 7], color: BLUE });
+    triangles.push(Triangle { group: [5, 7, 6], color: BLUE });
+    triangles.push(Triangle { group: [1, 5, 6], color: YELLOW });
+    triangles.push(Triangle { group: [1, 6, 2], color: YELLOW });
+    triangles.push(Triangle { group: [4, 5, 1], color: PURPLE });
+    triangles.push(Triangle { group: [4, 1, 0], color: PURPLE });
+    triangles.push(Triangle { group: [2, 6, 7], color: CYAN });
+    triangles.push(Triangle { group: [2, 7, 3], color: CYAN });
 
-    // The front face
-    rasterizer.draw_line(a, b, PURPLE);
-    rasterizer.draw_line(b, c, PURPLE);
-    rasterizer.draw_line(c, d, PURPLE);
-    rasterizer.draw_line(d, a, PURPLE);
+    let move_vector = [-1.5, 0.0, 7.0];
+    let moved = vertices
+        .iter()
+        .map(|&f| vector_addition(f, move_vector))
+        .collect();
 
-    // The back face
-    rasterizer.draw_line(e, f, RED);
-    rasterizer.draw_line(f, g, RED);
-    rasterizer.draw_line(g, h, RED);
-    rasterizer.draw_line(h, e, RED);
-
-    // The front-to-back edges
-    rasterizer.draw_line(a, e, GREEN);
-    rasterizer.draw_line(b, f, GREEN);
-    rasterizer.draw_line(c, g, GREEN);
-    rasterizer.draw_line(d, h, GREEN);
+    rasterizer.render_object(moved, triangles);
 
     return rasterizer;
 }
