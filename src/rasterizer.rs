@@ -1,9 +1,56 @@
 use crate::geometry::{ Vertex };
 use crate::utilities::{interpolate, multiply_color, vector_addition};
 
+const RED: [f32; 3] = [255.0, 0.0, 0.0];
+const GREEN: [f32; 3] = [0.0, 255.0, 0.0];
+const BLUE: [f32; 3] = [0.0, 0.0, 255.0];
+const PURPLE: [f32; 3] = [255.0, 0.0, 255.0];
+const YELLOW: [f32; 3] = [255.0, 255.0, 0.0];
+const CYAN: [f32; 3] = [0.0, 255.0, 255.0];
+
 pub struct Triangle {
     group: [usize; 3],
     color: [f32; 3],
+}
+
+pub struct Box {
+    position: [f32; 3],
+}
+
+impl Box {
+    pub const VERTICES: [[f32; 3]; 8] = [
+        [ 1.0,  1.0,  1.0],
+        [-1.0,  1.0,  1.0],
+        [-1.0, -1.0,  1.0],
+        [ 1.0, -1.0,  1.0],
+        [ 1.0,  1.0, -1.0],
+        [-1.0,  1.0, -1.0],
+        [-1.0, -1.0, -1.0],
+        [ 1.0, -1.0, -1.0],
+    ];
+    pub const TRIANGLES: [Triangle; 12] = [
+        Triangle { group: [0, 1, 2], color: RED },
+        Triangle { group: [0, 2, 3], color: RED },
+        Triangle { group: [4, 0, 3], color: GREEN },
+        Triangle { group: [4, 3, 7], color: GREEN },
+        Triangle { group: [5, 4, 7], color: BLUE },
+        Triangle { group: [5, 7, 6], color: BLUE },
+        Triangle { group: [1, 5, 6], color: YELLOW },
+        Triangle { group: [1, 6, 2], color: YELLOW },
+        Triangle { group: [4, 5, 1], color: PURPLE },
+        Triangle { group: [4, 1, 0], color: PURPLE },
+        Triangle { group: [2, 6, 7], color: CYAN },
+        Triangle { group: [2, 7, 3], color: CYAN },
+    ];
+
+    pub fn get_geometry(&mut self) -> (Vec<[f32; 3]>, Vec<Triangle>) {
+        let moved = Self::VERTICES
+            .iter()
+            .map(|&f| vector_addition(f, self.position))
+            .collect();
+
+        return (moved, Vec::from(Self::TRIANGLES));
+    }
 }
 
 pub struct Rasterizer {
@@ -154,44 +201,13 @@ impl Rasterizer {
 pub fn init_rasterizer() -> Rasterizer {
     let mut rasterizer = Rasterizer::new();
 
-    const RED: [f32; 3] = [255.0, 0.0, 0.0];
-    const GREEN: [f32; 3] = [0.0, 255.0, 0.0];
-    const BLUE: [f32; 3] = [0.0, 0.0, 255.0];
-    const PURPLE: [f32; 3] = [255.0, 0.0, 255.0];
-    const YELLOW: [f32; 3] = [255.0, 255.0, 0.0];
-    const CYAN: [f32; 3] = [0.0, 255.0, 255.0];
+    let mut box_a = Box { position: [-1.5, 0.0, 7.0] };
+    let (box_a_position, box_a_triangles) = box_a.get_geometry();
+    rasterizer.render_object(box_a_position, box_a_triangles);
 
-    let mut vertices: Vec<[f32; 3]> = vec![];
-    vertices.push([ 1.0,  1.0,  1.0]);
-    vertices.push([-1.0,  1.0,  1.0]);
-    vertices.push([-1.0, -1.0,  1.0]);
-    vertices.push([ 1.0, -1.0,  1.0]);
-    vertices.push([ 1.0,  1.0, -1.0]);
-    vertices.push([-1.0,  1.0, -1.0]);
-    vertices.push([-1.0, -1.0, -1.0]);
-    vertices.push([ 1.0, -1.0, -1.0]);
-
-    let mut triangles: Vec<Triangle> = vec![];
-    triangles.push(Triangle { group: [0, 1, 2], color: RED });
-    triangles.push(Triangle { group: [0, 2, 3], color: RED });
-    triangles.push(Triangle { group: [4, 0, 3], color: GREEN });
-    triangles.push(Triangle { group: [4, 3, 7], color: GREEN });
-    triangles.push(Triangle { group: [5, 4, 7], color: BLUE });
-    triangles.push(Triangle { group: [5, 7, 6], color: BLUE });
-    triangles.push(Triangle { group: [1, 5, 6], color: YELLOW });
-    triangles.push(Triangle { group: [1, 6, 2], color: YELLOW });
-    triangles.push(Triangle { group: [4, 5, 1], color: PURPLE });
-    triangles.push(Triangle { group: [4, 1, 0], color: PURPLE });
-    triangles.push(Triangle { group: [2, 6, 7], color: CYAN });
-    triangles.push(Triangle { group: [2, 7, 3], color: CYAN });
-
-    let move_vector = [-1.5, 0.0, 7.0];
-    let moved = vertices
-        .iter()
-        .map(|&f| vector_addition(f, move_vector))
-        .collect();
-
-    rasterizer.render_object(moved, triangles);
+    let mut box_b = Box { position: [1.25, 2.0, 7.5] };
+    let (box_b_position, box_b_triangles) = box_b.get_geometry();
+    rasterizer.render_object(box_b_position, box_b_triangles);
 
     return rasterizer;
 }
