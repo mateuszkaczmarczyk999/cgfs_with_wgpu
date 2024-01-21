@@ -9,7 +9,7 @@ impl Camera {
     pub fn new(position: [f32; 3], rotation: Option<(Axis, f32)>) -> Self {
         Self { position, rotation }
     }
-    pub fn get_view_mat4(&mut self) -> [[f32; 4]; 4] {
+    pub fn get_projection_mat4(&mut self) -> [[f32; 4]; 4] {
         let origin = mat4_default();
         let translation_mat4 = to_inverse_translation_mat4(self.position);
         let rotation_mat4 = self.handle_inverse_rotation_mat4();
@@ -37,7 +37,7 @@ pub struct PerspectiveProjection {
 
 impl PerspectiveProjection {
     pub fn new(field_of_view: f32, aspect_ratio: f32, near_clipping_plane: f32, far_clipping_plane: f32) -> Self {
-        Self { field_of_view, aspect_ratio, near_clipping_plane, far_clipping_plane }
+        Self { field_of_view: field_of_view.to_radians(), aspect_ratio, near_clipping_plane, far_clipping_plane }
     }
 
     pub fn get_projection_mat4(&self) -> [[f32; 4]; 4] {
@@ -65,14 +65,14 @@ impl Viewport {
     pub fn new(width: f32, height: f32) -> Self {
         Self { width, height }
     }
-    pub fn to_canvas_mat4(&self, x: f32, y: f32) -> [[f32; 4]; 4] {
+    pub fn to_canvas_mat4(&self) -> [[f32; 4]; 4] {
         let half_width = self.width / 2.0;
         let half_height = self.height / 2.0;
 
         [
-            [half_width, 0.0, 0.0, x + half_width],
-            [0.0, half_height, 0.0, y + half_height],
-            [0.0, 0.0, 0.5, 0.5],
+            [half_width, 0.0, 0.0, half_width],
+            [0.0, half_height, 0.0, half_height],
+            [0.0, 0.0, 1.0, 0.0],
             [0.0, 0.0, 0.0, 1.0],
         ]
     }

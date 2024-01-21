@@ -1,5 +1,6 @@
 use crate::geometry::{ Vertex };
-use crate::utilities::{Axis, interpolate, multiply_color, vector_multiplication, vector_addition, rotate_vector, to_translation_mat4, to_scale_mat4, to_rotation_mat4, mat4_default, multiply_mat4_mat4, to_inverse_translation_mat4, to_inverse_rotation_mat4};
+use crate::projection::{Camera, PerspectiveProjection, Viewport};
+use crate::utilities::{Axis, multiply_mat4_vec, interpolate, multiply_color, vector_multiplication, vector_addition, rotate_vector, to_translation_mat4, to_scale_mat4, to_rotation_mat4, mat4_default, multiply_mat4_mat4, to_inverse_translation_mat4, to_inverse_rotation_mat4};
 
 const RED: [f32; 3] = [255.0, 0.0, 0.0];
 const GREEN: [f32; 3] = [0.0, 255.0, 0.0];
@@ -100,19 +101,18 @@ impl Box {
 
 pub struct Rasterizer {
     state: Vec<Vertex>,
+    viewport: Viewport,
+    camera: Camera,
+    projection: PerspectiveProjection,
 }
 
 impl Rasterizer {
     pub const CANVAS: [i32; 2] = [ 1600, 1600 ];
-    // Canvas size
-
     pub const VIEWPORT: [f32; 3] = [1.0, 1.0, 1.0];
-    // Viewport width, height and depth which is camera distance
-
     pub const CAMERA_POSITION: [f32; 3] = [0.0, 0.0, 0.0];
 
-    pub fn new() -> Self {
-        Self { state: vec![] }
+    pub fn new(viewport: Viewport, camera: Camera, projection: PerspectiveProjection) -> Self {
+        Self { state: vec![], viewport, camera, projection }
     }
 
     fn render_triangle(&mut self, indices: [usize; 3], projection: Vec<[i32; 2]>, rgb: [f32; 3]) {
@@ -122,11 +122,13 @@ impl Rasterizer {
         self.draw_wireframe_triangle(point_a, point_b, point_c, rgb);
     }
 
-    fn render_object(&mut self, vertices: Vec<[f32; 3]>, geometries: Vec<Triangle>) {
+    fn render_object(&mut self, vertices: Vec<[f32; 3]>, geometries: Vec<Triangle>, transform: [[f32; 4]; 4]) {
         let mut projection: Vec<[i32; 2]> = vec![];
 
         for vertex in vertices.iter() {
-            projection.push(self.project_vertex(vertex))
+            let cam_proj = multiply_mat4_mat4(self.camera.get_projection_mat4(), transform);
+            let vert_proj = multiply_mat4_vec(cam_proj, [vertex[0], vertex[1], vertex[2], 1.0]);
+            projection.push(self.project_vertex(&[vert_proj[0], vert_proj[1], vert_proj[2]]))
         }
         for geometry in geometries.iter() {
             self.render_triangle(geometry.group, projection.clone(), geometry.color);
@@ -244,15 +246,20 @@ impl Rasterizer {
 }
 
 pub fn init_rasterizer() -> Rasterizer {
-    let mut rasterizer = Rasterizer::new();
+    let viewport = Viewport::new(1600.0, 1600.0);
+    let camera = Camera::new([0.0, 0.0, 0.0], None);
+    let projection = PerspectiveProjection::new(60.0, 1.0, 10.0, 70.0);
+    let mut rasterizer = Rasterizer::new(viewport, camera, projection);
 
-    let mut box_a = Box::new([1.0, 1.0, 1.0], [-1.5, 0.0, 7.0], Some((Axis::Y, 45.0)));
+    let mut box_a = Box::new([1.0, 1.0, 1.0], [-1.5, 0.0, 7.0], None);
     let (box_a_position, box_a_triangles) = box_a.get_geometry();
-    rasterizer.render_object(box_a_position, box_a_triangles);
+    let box_a_transform = box_a.get_model_mat4();
+    rasterizer.render_object(box_a_position, box_a_triangles, box_a_transform);
 
-    let mut box_b = Box::new([1.0, 4.0, 1.0], [1.25, 2.0, 7.5], Some((Axis::X, 45.0)));
+    let mut box_b = Box::new([1.0, 1.0, 1.0], [1.25, 2.0, 7.5], None);
     let (box_b_position, box_b_triangles) = box_b.get_geometry();
-    rasterizer.render_object(box_b_position, box_b_triangles);
+    let box_b_transform = box_b.get_model_mat4();
+    rasterizer.render_object(box_b_position, box_b_triangles, box_b_transform);
 
     return rasterizer;
 }
