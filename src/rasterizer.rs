@@ -1,5 +1,5 @@
 use crate::geometry::{ Vertex };
-use crate::utilities::{interpolate, multiply_color, vector_addition};
+use crate::utilities::{Axis, interpolate, multiply_color, scale_vector, vector_addition, rotate_vector};
 
 const RED: [f32; 3] = [255.0, 0.0, 0.0];
 const GREEN: [f32; 3] = [0.0, 255.0, 0.0];
@@ -14,6 +14,8 @@ pub struct Triangle {
 }
 
 pub struct Box {
+    scale: f32,
+    rotation: Option<(Axis, f32)>,
     position: [f32; 3],
 }
 
@@ -44,12 +46,24 @@ impl Box {
     ];
 
     pub fn get_geometry(&mut self) -> (Vec<[f32; 3]>, Vec<Triangle>) {
-        let moved = Self::VERTICES
+        let scale = self.scale;
+        let position = self.position;
+
+        let transformed = Self::VERTICES
             .iter()
-            .map(|&f| vector_addition(f, self.position))
+            .map(|&f| self.handle_rotation(f))
+            .map(|f| scale_vector(f, scale))
+            .map(|f| vector_addition(f, position))
             .collect();
 
-        return (moved, Vec::from(Self::TRIANGLES));
+        return (transformed, Vec::from(Self::TRIANGLES));
+    }
+
+    fn handle_rotation(&mut self, vertex: [f32; 3]) -> [f32; 3] {
+        return match &self.rotation {
+            Some(rotation) => { rotate_vector(vertex, rotation) },
+            None => vertex
+        }
     }
 }
 
@@ -201,11 +215,11 @@ impl Rasterizer {
 pub fn init_rasterizer() -> Rasterizer {
     let mut rasterizer = Rasterizer::new();
 
-    let mut box_a = Box { position: [-1.5, 0.0, 7.0] };
+    let mut box_a = Box { scale: 1.0, rotation: Some((Axis::Y, 45.0)), position: [-1.5, 0.0, 7.0] };
     let (box_a_position, box_a_triangles) = box_a.get_geometry();
     rasterizer.render_object(box_a_position, box_a_triangles);
 
-    let mut box_b = Box { position: [1.25, 2.0, 7.5] };
+    let mut box_b = Box { scale: 1.0, rotation: Some((Axis::X, 45.0)), position: [1.25, 2.0, 7.5] };
     let (box_b_position, box_b_triangles) = box_b.get_geometry();
     rasterizer.render_object(box_b_position, box_b_triangles);
 

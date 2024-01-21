@@ -1,3 +1,5 @@
+pub enum Axis { X, Y, Z }
+
 pub fn dot_product(v1: [f32; 3], v2: [f32; 3]) -> f32 {
     v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2]
 }
@@ -51,4 +53,30 @@ pub fn interpolate(start_idx: i32, start_val: f32, end_idx: i32, end_val: f32) -
     }
 
     return values;
+}
+
+pub fn rotate_vector(v1: [f32; 3], rotation: &(Axis, f32)) -> [f32; 3] {
+    let (axis, angle) = rotation;
+    let radian = angle.to_radians();
+
+    return match axis {
+        Axis::X => {
+            let x = v1[0];
+            let y = v1[1] * radian.cos() - v1[2] * radian.sin();
+            let z = v1[1] * radian.sin() + v1[2] * radian.cos();
+            [x, y, z]
+        },
+        Axis::Y => {
+            let x = v1[2] * radian.sin() + v1[0] * radian.cos();
+            let y = v1[1];
+            let z = v1[2] * radian.cos() - v1[0] * radian.sin();
+            [x, y, z]
+        },
+        Axis::Z => {
+            let x = v1[0] * radian.cos() - v1[1] * radian.sin();
+            let y = v1[0] * radian.sin() + v1[1] * radian.cos();
+            let z = v1[2];
+            [x, y, z]
+        },
+    }
 }
