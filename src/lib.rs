@@ -2,6 +2,8 @@ mod utilities;
 mod raytracer;
 mod geometry;
 mod rasterizer;
+mod projection;
+
 
 use wgpu::util::DeviceExt;
 use winit::{

@@ -18,7 +18,6 @@ pub struct Box {
     rotation: Option<(Axis, f32)>,
     position: [f32; 3],
 }
-
 impl Default for Box {
     fn default() -> Self {
         Self {
@@ -28,8 +27,10 @@ impl Default for Box {
         }
     }
 }
-
 impl Box {
+    pub fn new(scale: [f32; 3], position: [f32; 3], rotation: Option<(Axis, f32)>) -> Self {
+        Self { scale, position, rotation }
+    }
     pub const VERTICES: [[f32; 3]; 8] = [
         [ 1.0,  1.0,  1.0],
         [-1.0,  1.0,  1.0],
@@ -61,8 +62,8 @@ impl Box {
 
         let transformed = Self::VERTICES
             .iter()
-            .map(|&f| self.handle_rotation(f))
-            .map(|f| vector_multiplication(f, scale))
+            .map(|&f| vector_multiplication(f, scale))
+            .map(|f| self.handle_rotation(f))
             .map(|f| vector_addition(f, position))
             .collect();
 
@@ -92,31 +93,6 @@ impl Box {
     fn handle_rotation_mat4(&mut self) -> [[f32; 4]; 4] {
         return match &self.rotation {
             Some((axis, angle)) => { to_rotation_mat4(*axis, angle.to_radians()) },
-            None => mat4_default()
-        }
-    }
-}
-
-pub struct Camera {
-    position: [f32; 3],
-    rotation: Option<(Axis, f32)>,
-}
-
-impl Camera {
-    pub fn get_view_mat4(&mut self) -> [[f32; 4]; 4] {
-        let origin = mat4_default();
-        let translation_mat4 = to_inverse_translation_mat4(self.position);
-        let rotation_mat4 = self.handle_inverse_rotation_mat4();
-
-        let rotated_projection = multiply_mat4_mat4(origin, rotation_mat4);
-        let translated_projection = multiply_mat4_mat4(rotated_projection, translation_mat4);
-
-        return translated_projection;
-    }
-
-    fn handle_inverse_rotation_mat4(&mut self) -> [[f32; 4]; 4] {
-        return match &self.rotation {
-            Some((axis, angle)) => { to_inverse_rotation_mat4(*axis, angle.to_radians()) },
             None => mat4_default()
         }
     }
@@ -270,11 +246,11 @@ impl Rasterizer {
 pub fn init_rasterizer() -> Rasterizer {
     let mut rasterizer = Rasterizer::new();
 
-    let mut box_a = Box { scale: [1.0, 1.0, 1.0], rotation: Some((Axis::Y, 45.0)), position: [-1.5, 0.0, 7.0] };
+    let mut box_a = Box::new([1.0, 1.0, 1.0], [-1.5, 0.0, 7.0], Some((Axis::Y, 45.0)));
     let (box_a_position, box_a_triangles) = box_a.get_geometry();
     rasterizer.render_object(box_a_position, box_a_triangles);
 
-    let mut box_b = Box { scale: [1.0, 1.0, 1.0], rotation: Some((Axis::X, 45.0)), position: [1.25, 2.0, 7.5] };
+    let mut box_b = Box::new([1.0, 4.0, 1.0], [1.25, 2.0, 7.5], Some((Axis::X, 45.0)));
     let (box_b_position, box_b_triangles) = box_b.get_geometry();
     rasterizer.render_object(box_b_position, box_b_triangles);
 
