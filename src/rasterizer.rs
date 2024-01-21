@@ -1,5 +1,5 @@
 use crate::geometry::{ Vertex };
-use crate::utilities::{Axis, interpolate, multiply_color, scale_vector, vector_addition, rotate_vector};
+use crate::utilities::{Axis, interpolate, multiply_color, vector_multiplication, vector_addition, rotate_vector, to_translation_mat4, to_scale_mat4, to_rotation_mat4, mat4_default, multiply_mat4_mat4, to_inverse_translation_mat4, to_inverse_rotation_mat4};
 
 const RED: [f32; 3] = [255.0, 0.0, 0.0];
 const GREEN: [f32; 3] = [0.0, 255.0, 0.0];
@@ -14,9 +14,19 @@ pub struct Triangle {
 }
 
 pub struct Box {
-    scale: f32,
+    scale: [f32; 3],
     rotation: Option<(Axis, f32)>,
     position: [f32; 3],
+}
+
+impl Default for Box {
+    fn default() -> Self {
+        Self {
+            scale: [1.0, 1.0, 1.0],
+            rotation: None,
+            position: [0.0, 0.0, 0.0],
+        }
+    }
 }
 
 impl Box {
@@ -52,7 +62,7 @@ impl Box {
         let transformed = Self::VERTICES
             .iter()
             .map(|&f| self.handle_rotation(f))
-            .map(|f| scale_vector(f, scale))
+            .map(|f| vector_multiplication(f, scale))
             .map(|f| vector_addition(f, position))
             .collect();
 
@@ -63,6 +73,51 @@ impl Box {
         return match &self.rotation {
             Some(rotation) => { rotate_vector(vertex, rotation) },
             None => vertex
+        }
+    }
+
+    pub fn get_model_mat4(&mut self) -> [[f32; 4]; 4] {
+        let origin = mat4_default();
+        let translation_mat4 = to_translation_mat4(self.position);
+        let scale_mat4 = to_scale_mat4(self.scale);
+        let rotation_mat4 = self.handle_rotation_mat4();
+
+        let translated_projection = multiply_mat4_mat4(origin, translation_mat4);
+        let rotated_projection = multiply_mat4_mat4(translated_projection, rotation_mat4);
+        let scaled_projection =  multiply_mat4_mat4(rotated_projection, scale_mat4);
+
+        return scaled_projection;
+    }
+
+    fn handle_rotation_mat4(&mut self) -> [[f32; 4]; 4] {
+        return match &self.rotation {
+            Some((axis, angle)) => { to_rotation_mat4(*axis, angle.to_radians()) },
+            None => mat4_default()
+        }
+    }
+}
+
+pub struct Camera {
+    position: [f32; 3],
+    rotation: Option<(Axis, f32)>,
+}
+
+impl Camera {
+    pub fn get_view_mat4(&mut self) -> [[f32; 4]; 4] {
+        let origin = mat4_default();
+        let translation_mat4 = to_inverse_translation_mat4(self.position);
+        let rotation_mat4 = self.handle_inverse_rotation_mat4();
+
+        let rotated_projection = multiply_mat4_mat4(origin, rotation_mat4);
+        let translated_projection = multiply_mat4_mat4(rotated_projection, translation_mat4);
+
+        return translated_projection;
+    }
+
+    fn handle_inverse_rotation_mat4(&mut self) -> [[f32; 4]; 4] {
+        return match &self.rotation {
+            Some((axis, angle)) => { to_inverse_rotation_mat4(*axis, angle.to_radians()) },
+            None => mat4_default()
         }
     }
 }
@@ -215,11 +270,11 @@ impl Rasterizer {
 pub fn init_rasterizer() -> Rasterizer {
     let mut rasterizer = Rasterizer::new();
 
-    let mut box_a = Box { scale: 1.0, rotation: Some((Axis::Y, 45.0)), position: [-1.5, 0.0, 7.0] };
+    let mut box_a = Box { scale: [1.0, 1.0, 1.0], rotation: Some((Axis::Y, 45.0)), position: [-1.5, 0.0, 7.0] };
     let (box_a_position, box_a_triangles) = box_a.get_geometry();
     rasterizer.render_object(box_a_position, box_a_triangles);
 
-    let mut box_b = Box { scale: 1.0, rotation: Some((Axis::X, 45.0)), position: [1.25, 2.0, 7.5] };
+    let mut box_b = Box { scale: [1.0, 1.0, 1.0], rotation: Some((Axis::X, 45.0)), position: [1.25, 2.0, 7.5] };
     let (box_b_position, box_b_triangles) = box_b.get_geometry();
     rasterizer.render_object(box_b_position, box_b_triangles);
 
